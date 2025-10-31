@@ -1,6 +1,6 @@
 import Contact from "../models/Contact.js";
 import Service from "../models/Service.js";
-import sendEmailResend from "../utils/sendEmailResend.js"; // Changed to Resend
+import sendEmailWeb3Forms from "../utils/sendEmailWeb3Forms.js"; // Changed to Web3Forms
 
 // @desc    Submit a new contact / enquiry / quotation
 // @route   POST /api/contact
@@ -36,47 +36,45 @@ export const createContact = async (req, res) => {
         ? "Service Enquiry"
         : "Contact Message";
 
-    // ✅ Build admin email
-    const emailHTML = `
-      <h2>📩 New ${heading}</h2>
-      <p><strong>Name:</strong> ${contact.name}</p>
-      <p><strong>Email:</strong> ${contact.email}</p>
-      ${contact.phone ? `<p><strong>Phone:</strong> ${contact.phone}</p>` : ""}
-
-      ${
-        contact.service
-          ? `<p><strong>Service Selected:</strong> ${contact.service.title} (${contact.service.category}) — $${contact.service.price}</p>`
-          : ""
-      }
-
-      ${contact.company ? `<p><strong>Company:</strong> ${contact.company}</p>` : ""}
-      ${contact.budgetRange ? `<p><strong>Budget:</strong> ${contact.budgetRange}</p>` : ""}
-      ${contact.timeline ? `<p><strong>Timeline:</strong> ${contact.timeline}</p>` : ""}
-
-      <p><strong>Subject:</strong> ${contact.subject}</p>
-      <p><strong>Message:</strong></p>
-      <blockquote>${contact.message}</blockquote>
-
-      <hr />
-      <p style="font-size: 11px; color: #777;">
-        This message was automatically sent from your portfolio backend.
-      </p>
-    `;
-
     let emailsSent = 0;
 
     // ✅ Send to admin (don't block on failure)
     try {
-      await sendEmailResend({
-        to: process.env.NOTIFY_EMAIL,
+      const adminEmailHTML = `
+        <h2>📩 New ${heading}</h2>
+        <p><strong>Name:</strong> ${contact.name}</p>
+        <p><strong>Email:</strong> ${contact.email}</p>
+        ${contact.phone ? `<p><strong>Phone:</strong> ${contact.phone}</p>` : ""}
+
+        ${
+          contact.service
+            ? `<p><strong>Service Selected:</strong> ${contact.service.title} (${contact.service.category}) — $${contact.service.price}</p>`
+            : ""
+        }
+
+        ${contact.company ? `<p><strong>Company:</strong> ${contact.company}</p>` : ""}
+        ${contact.budgetRange ? `<p><strong>Budget:</strong> ${contact.budgetRange}</p>` : ""}
+        ${contact.timeline ? `<p><strong>Timeline:</strong> ${contact.timeline}</p>` : ""}
+
+        <p><strong>Subject:</strong> ${contact.subject}</p>
+        <p><strong>Message:</strong></p>
+        <blockquote>${contact.message}</blockquote>
+
+        <hr />
+        <p style="font-size: 11px; color: #777;">
+          This message was automatically sent from your portfolio backend.
+        </p>
+      `;
+
+      await sendEmailWeb3Forms({
+        to: process.env.NOTIFY_EMAIL, // Your email
         subject: `New ${heading} — ${contact.name}`,
-        html: emailHTML,
+        html: adminEmailHTML,
       });
       console.log(`📨 Admin email sent to: ${process.env.NOTIFY_EMAIL}`);
       emailsSent++;
     } catch (emailError) {
       console.error("❌ Failed to send admin email:", emailError.message);
-      // Don't fail the entire request if email fails
     }
 
     // ✅ Show available services for enquiries or quotations
@@ -129,12 +127,11 @@ export const createContact = async (req, res) => {
         
         <hr />
         <p style="font-size: 12px; color: #777;">
-          This is an automated reply. Please do not reply directly to this email.<br />
-          I'll contact you personally from my main email address soon.
+          This is an automated confirmation. I'll personally respond to your message within 24 hours.
         </p>
       `;
 
-      await sendEmailResend({
+      await sendEmailWeb3Forms({
         to: contact.email,
         subject: `✅ We've received your ${
           contact.type === "quotation" ? "quotation request" : "message"
@@ -146,7 +143,6 @@ export const createContact = async (req, res) => {
       emailsSent++;
     } catch (autoReplyError) {
       console.error("❌ Failed to send auto-reply:", autoReplyError.message);
-      // Don't fail the entire request if auto-reply fails
     }
 
     // Always return success if contact was created
@@ -183,8 +179,7 @@ export const createContact = async (req, res) => {
   }
 };
 
-// @route   GET /api/contact
-// @access  Private (Admin)
+// ... keep the other functions (getContacts, updateContactStatus, deleteContact) exactly the same ...
 export const getContacts = async (req, res) => {
   try {
     const { type, status, search } = req.query;
