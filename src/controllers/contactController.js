@@ -7,9 +7,26 @@ import sendEmail from "../utils/sendEmail.js";
 // @access  Public
 export const createContact = async (req, res) => {
   try {
-    let contact = await Contact.create(req.body);
+    // Validate required fields
+    const { name, email, message } = req.body;
+    
+    if (!name || !email || !message) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, email, and message are required fields"
+      });
+    }
 
-    // ✅ Populate service to access title/category/price
+    // Validate email format
+    const emailRegex = /.+\@.+\..+/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid email address"
+      });
+    }
+
+    let contact = await Contact.create(req.body);
     contact = await contact.populate("service", "title price category");
 
     const heading =
@@ -46,14 +63,18 @@ export const createContact = async (req, res) => {
       </p>
     `;
 
-    // ✅ Send to admin
-    await sendEmail({
-      to: process.env.NOTIFY_EMAIL,
-      subject: `New ${heading} — ${contact.name}`,
-      html: emailHTML,
-    });
-
-    console.log(`📨 Email sent to admin: ${process.env.NOTIFY_EMAIL}`);
+    // ✅ Send to admin (don't block on failure)
+    try {
+      await sendEmail({
+        to: process.env.NOTIFY_EMAIL,
+        subject: `New ${heading} — ${contact.name}`,
+        html: emailHTML,
+      });
+      console.log(`📨 Email sent to admin: ${process.env.NOTIFY_EMAIL}`);
+    } catch (emailError) {
+      console.error("❌ Failed to send admin email:", emailError.message);
+      // Don't fail the entire request if email fails
+    }
 
     // ✅ Show available services for enquiries or quotations
     let servicesSection = "";
@@ -77,48 +98,78 @@ export const createContact = async (req, res) => {
       }
     }
 
-    // ✅ Auto reply to user
-    const autoReplyHTML = `
-      <h2>Hi ${contact.name}, 👋</h2>
-      <p>Thanks for your ${
-        contact.type === "quotation"
-          ? "quotation request — I’ll send a custom offer soon."
-          : contact.type === "enquiry"
-          ? "service enquiry — I’ll reply shortly."
-          : "message — I’ll get back shortly."
-      }</p>
+    // ✅ Auto reply to user (don't block on failure)
+    try {
+      const autoReplyHTML = `
+        <h2>Hi ${contact.name}, 👋</h2>
+        <p>Thanks for your ${
+          contact.type === "quotation"
+            ? "quotation request — I'll send a custom offer soon."
+            : contact.type === "enquiry"
+            ? "service enquiry — I'll reply shortly."
+            : "message — I'll get back shortly."
+        }</p>
 
-      ${
-        contact.service
-          ? `<p><strong>Service Chosen:</strong> ${contact.service.title}</p>`
-          : ""
-      }
+        ${
+          contact.service
+            ? `<p><strong>Service Chosen:</strong> ${contact.service.title}</p>`
+            : ""
+        }
 
-      ${contact.company ? `<p><strong>Company:</strong> ${contact.company}</p>` : ""}
-      ${contact.budgetRange ? `<p><strong>Budget:</strong> ${contact.budgetRange}</p>` : ""}
-      ${contact.timeline ? `<p><strong>Timeline:</strong> ${contact.timeline}</p>` : ""}
+        ${contact.company ? `<p><strong>Company:</strong> ${contact.company}</p>` : ""}
+        ${contact.budgetRange ? `<p><strong>Budget:</strong> ${contact.budgetRange}</p>` : ""}
+        ${contact.timeline ? `<p><strong>Timeline:</strong> ${contact.timeline}</p>` : ""}
 
-      ${servicesSection}
+        ${servicesSection}
 
-      <p>Regards,<br /><strong>O. Aloyce</strong></p>
-      <hr />
-      <p style="font-size: 12px; color: #777;">This is an automated reply — don’t reply directly.</p>
-    `;
+        <p>Regards,<br /><strong>O. Aloyce</strong></p>
+        <hr />
+        <p style="font-size: 12px; color: #777;">This is an automated reply — don't reply directly.</p>
+      `;
 
-    await sendEmail({
-      to: contact.email,
-      subject: `✅ We've received your ${
-        contact.type === "quotation" ? "quotation request" : "message"
-      }`,
-      html: autoReplyHTML,
+      await sendEmail({
+        to: contact.email,
+        subject: `✅ We've received your ${
+          contact.type === "quotation" ? "quotation request" : "message"
+        }`,
+        html: autoReplyHTML,
+      });
+
+      console.log(`🤖 Auto-reply sent to: ${contact.email}`);
+    } catch (autoReplyError) {
+      console.error("❌ Failed to send auto-reply:", autoReplyError.message);
+      // Don't fail the entire request if auto-reply fails
+    }
+
+    // Always return success if contact was created
+    res.status(201).json({ 
+      success: true, 
+      contact,
+      message: "Your message has been received successfully!"
     });
-
-    console.log(`🤖 Auto-reply sent to: ${contact.email}`);
-
-    res.status(201).json({ success: true, contact });
   } catch (error) {
     console.error("❌ Error creating contact:", error);
-    res.status(400).json({ success: false, message: error.message });
+    
+    // Handle duplicate submissions or validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: messages.join(', ')
+      });
+    }
+    
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Duplicate submission detected"
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: "Server error. Please try again later." 
+    });
   }
 };
 
