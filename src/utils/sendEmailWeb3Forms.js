@@ -4,6 +4,20 @@ const sendEmailWeb3Forms = async ({ to, subject, html }) => {
     console.log('📧 To:', to);
     console.log('📧 Subject:', subject);
 
+    // Convert HTML to plain text for the message body
+    const plainText = html
+      .replace(/<h[1-6]>/g, '\n\n') // Headers get extra spacing
+      .replace(/<\/h[1-6]>/g, '\n')
+      .replace(/<p>/g, '')
+      .replace(/<\/p>/g, '\n\n')
+      .replace(/<strong>/g, '**')
+      .replace(/<\/strong>/g, '**')
+      .replace(/<em>/g, '*')
+      .replace(/<\/em>/g, '*')
+      .replace(/<[^>]*>/g, '') // Remove all other HTML tags
+      .replace(/\n\s*\n/g, '\n\n') // Clean up extra newlines
+      .trim();
+
     const response = await fetch('https://api.web3forms.com/submit', {
       method: 'POST',
       headers: {
@@ -14,8 +28,7 @@ const sendEmailWeb3Forms = async ({ to, subject, html }) => {
         subject: subject,
         from_name: 'Aloyce Otieno',
         email: to,
-        message: html.replace(/<[^>]*>/g, ''), // Plain text version
-        html: html, // HTML version
+        message: plainText, // Just plain text, no HTML
       }),
     });
 
