@@ -1,6 +1,6 @@
 import Contact from "../models/Contact.js";
 import Service from "../models/Service.js";
-import sendEmail from "../utils/sendEmail.js";
+import sendEmailResend from "../utils/sendEmailResend.js"; // Changed to Resend
 
 // @desc    Submit a new contact / enquiry / quotation
 // @route   POST /api/contact
@@ -63,14 +63,17 @@ export const createContact = async (req, res) => {
       </p>
     `;
 
+    let emailsSent = 0;
+
     // ✅ Send to admin (don't block on failure)
     try {
-      await sendEmail({
+      await sendEmailResend({
         to: process.env.NOTIFY_EMAIL,
         subject: `New ${heading} — ${contact.name}`,
         html: emailHTML,
       });
-      console.log(`📨 Email sent to admin: ${process.env.NOTIFY_EMAIL}`);
+      console.log(`📨 Admin email sent to: ${process.env.NOTIFY_EMAIL}`);
+      emailsSent++;
     } catch (emailError) {
       console.error("❌ Failed to send admin email:", emailError.message);
       // Don't fail the entire request if email fails
@@ -107,7 +110,7 @@ export const createContact = async (req, res) => {
             ? "quotation request — I'll send a custom offer soon."
             : contact.type === "enquiry"
             ? "service enquiry — I'll reply shortly."
-            : "message — I'll get back shortly."
+            : "message — I'll get back to you shortly."
         }</p>
 
         ${
@@ -122,12 +125,16 @@ export const createContact = async (req, res) => {
 
         ${servicesSection}
 
-        <p>Regards,<br /><strong>O. Aloyce</strong></p>
+        <p>Best regards,<br /><strong>Aloyce Otieno</strong><br />Full-Stack Developer</p>
+        
         <hr />
-        <p style="font-size: 12px; color: #777;">This is an automated reply — don't reply directly.</p>
+        <p style="font-size: 12px; color: #777;">
+          This is an automated reply. Please do not reply directly to this email.<br />
+          I'll contact you personally from my main email address soon.
+        </p>
       `;
 
-      await sendEmail({
+      await sendEmailResend({
         to: contact.email,
         subject: `✅ We've received your ${
           contact.type === "quotation" ? "quotation request" : "message"
@@ -136,6 +143,7 @@ export const createContact = async (req, res) => {
       });
 
       console.log(`🤖 Auto-reply sent to: ${contact.email}`);
+      emailsSent++;
     } catch (autoReplyError) {
       console.error("❌ Failed to send auto-reply:", autoReplyError.message);
       // Don't fail the entire request if auto-reply fails
@@ -145,7 +153,9 @@ export const createContact = async (req, res) => {
     res.status(201).json({ 
       success: true, 
       contact,
-      message: "Your message has been received successfully!"
+      message: emailsSent > 0 
+        ? "Your message has been received successfully! We've sent you a confirmation email."
+        : "Your message has been received successfully! We'll get back to you soon."
     });
   } catch (error) {
     console.error("❌ Error creating contact:", error);
